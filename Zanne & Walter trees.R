@@ -11,24 +11,26 @@
 ################################################################################
 
 # set your working directory (the trees and Rsession will be saved here)
-setwd("~/Documents/01_PhD/01_Research/04_iDIV workshop")
+# setwd()
 
 library("ape")
 library("ggplot2")
 library("picante")
+library("reshape2")
+library("data.table")
 
 # first time #
 ######################################################################
 
 # download Tree WARNING: 75.8 MB will be downloaded!
 
-temp <- tempfile()
-download.file("http://datadryad.org/bitstream/handle/10255/dryad.59003/PhylogeneticResources.zip?sequence=1",temp)
-Tree <- read.tree(unz(temp, "PhylogeneticResources/Vascular_Plants_rooted.dated.tre"))
-unlink(temp)
+#temp <- tempfile()
+#download.file("http://datadryad.org/bitstream/handle/10255/dryad.59003/PhylogeneticResources.zip?sequence=1",temp)
+#Tree <- read.tree(unz(temp, "PhylogeneticResources/Vascular_Plants_rooted.dated.tre"))
+#unlink(temp)
 
 # save workspace 
-save.image("Tree.RData")
+#save.image("Tree.RData")
 
 # subsequent times, load Tree from image
 ######################################################################
@@ -85,6 +87,8 @@ SPInv <- read.table("FunDivTrees.txt",header=T,sep="\t")
 SPInv[which (! SPInv$PD.code %in% Tree$tip.label),]$PD.code[
   grep("_",SPInv[which (! SPInv$PD.code %in% Tree$tip.label),]$PD.code)]
 
+# 41/240 species or subspecies not present in in Zannes Tree
+
 # check which genus are not in Phylogeny
 SPInv[which (! sub("(\\w)_.+","\\1",SPInv$PD.code) %in% 
                  sub("(\\w)_.+","\\1",Tree$tip.label)),]$PD.code
@@ -93,23 +97,18 @@ SPInv[which (! sub("(\\w)_.+","\\1",SPInv$PD.code) %in%
 # Visnea
 
 #subset Tree to include only genuses present in Inventory dataset
+# create tree with only one species per genus (first species per genus kept)
 
 # vector of Genuses in inventory
 INV.G <- unique(sub("(\\w)_.+","\\1",SPInv$PD.code))
 
-#Vectors of Tips to drop
+# drop all species from genus not present in inventory dataset
 Drop <- Tree$tip.label[-c(which(sub("(\\w)_.+","\\1",Tree$tip.label) %in% INV.G))]
-
-# substree with all species in Experiments and Exploratories
 TreeInv<-drop.tip(Tree,Drop)
 
-# create tree with only one species per genus (first species per genus kept)
-
-# vector of tips to drop
+# keep only the first species per genus
 Drop2<- TreeInv$tip.label[-c(match(unique(sub("(\\w)_.+","\\1",TreeInv$tip.label))
               , sub("(\\w)_.+","\\1",TreeInv$tip.label)))]
-
-# drop all tips per genus but the first one
 TreeInvG <- drop.tip(TreeInv,Drop2)
 
 # cut tip labels to genus only
@@ -119,7 +118,61 @@ TreeInvG$tip.label <- sub("(\\w)_.+","\\1",TreeInvG$tip.label)
 
 ########## comparision between Genus based PD and Species PD ##################
 
+# load inventory species matrix ("species.matrix", structure is dataframe)
+# contains all plots in Inventories with unique plotcode (rows) and species /
+# genus identifier as columns. Species identifier is of the form GGGSpSpSp
+# colums are filled with basal area value of tree / Genus in specific plot
+
 load("upscale_inventory_species_matrix_ba_ha.RData")
+
+
+# group species to Genus level (add basal are in each plot of all species of the same Genus) #
+
+# I work with data.table as "melt" from the reshape2 package and "ddply" from the plyr package take very long on 
+# dataframe
+
+# transform first to matrix as somehow I can't get rid of the cast_df appendicies of species.matrix 
+specM <- as.matrix(species.matrix[,-1])
+dimnames(specM)<-list(species.matrix$plotcode,colnames(species.matrix)[-1])
+specDT <- as.data.table(specM)
+
+# adding plotcode as data.table 
+specDT[,plotcode := species.matrix$plotcode]
+
+#reshape dataframe in long format
+specDTm <- melt(specDT, id="plotcode", variable.name="speccode", value.name="basal_area")
+
+#add Genus column (first three lettres from speccode)
+specDTm[, genus := substr(speccode,1,3)]
+
+# sum all basal areas for all species in one genus in one plot
+setkeyv(specDTm,c("plotcode","genus"))
+spec_Genus <- specDTm[, sum(basal_area), by=list(plotcode,genus)]
+
+#cast datatabel into long format
+spec_Genus_l <- dcast.data.table(spec_Genus, plotcode~genus) ######## data.table with the basal areas for each Genus in each plot
+
+######## calculate Phylogentic diversity #########
+
+
+# extract unique Genus codes from species.matrix
+U<-unique(substr(colnames(species.matrix[-1]),1,3))
+
+# function to capitalize only first letter of string
+Cap <- function(x) {
+  s <- strsplit(x, " ")[[1]]
+  paste(toupper(substring(s, 1, 1)), tolower(substring(s, 2)),
+        sep = "", collapse = " ")
+}
+
+# apply function to U to be able to match it with the Genuses in Tree 
+sort(TreeInvG$tip.label[grep(paste(U,collapse="|") , TreeInvG$tip.label)])
+
+
+
+
+
+
 
 
 
