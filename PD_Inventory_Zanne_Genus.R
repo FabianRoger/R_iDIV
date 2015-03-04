@@ -179,5 +179,52 @@ colnames(PhylDiv) <- c("plotcode", "PSV","PSV_var","PSE","PSR","PSR_var","PD","g
 PhylDiv[,2:7][is.na(PhylDiv[,2:7])] <- 0
 
 # export results 
-write.table(PhylDiv,"PhylDiv_Inv_Genus.txt",sep="\t")
+#write.table(PhylDiv,"PhylDiv_Inv_Genus.txt",sep="\t")
+
+
+###########################
+# compare the correspondance of species level PD metrics with genus level PD metrics
+###########################
+
+# which species from the species.matrix are present in the tree from Zanne et al
+# compare the species codes (colnames) with the Species in the SPInv file and compare these species names 
+# with the tip.lables of Zannes tree.
+
+TreeSpec <- Tree
+
+# Species list of inventories (excluding Genus)
+SPInvSP <- SPInv[nchar(as.character(SPInv$Code)) == 6,]
+
+# further subsetted Species list of inventories with only species also present in species.matrix
+SPInvSPmat <- SPInvSP[SPInvSP$Code %in% colnames(species.matrix),]
+
+# which species from the species matrix are in TreeSpec # gives row ind from SPInv
+SPm <- which(SPInvSPmat$PD.code %in% TreeSpec$tip.label)
+
+# get corresponding columns in species matrix 
+CNp <- which(colnames(species.matrix) %in% SPInvSPmat[SPm,]$Code)
+
+# subset species.matrix for species present in Zannes Tree
+SPsub <- species.matrix[,c(1,CNp)]
+
+# exclude plots with 0 abundance
+SPsub <- SPsub[-c(which(rowSums(SPsub[,-1]) == 0)),]
+
+# make species matrix
+SPsubm <- as.matrix(SPsub[,-1])
+dimnames(SPsubm)<-list(SPsub$plotcode,colnames(SPsub[,-1]))
+
+#### make Tree with only species present in species matrix
+
+# DropT <- tips to drop
+DropT <- TreeSpec$tip.label[which(! TreeSpec$tip.label %in% SPInvSPmat[SPInvSPmat$Code %in% colnames(SPsubm),]$PD.code)]
+
+#drop tips 
+TreeSpec <- drop.tip(TreeSpec, DropT)
+
+# transform tiplabel to same code as used in species matrix (GGGSSS)
+TreeSpec$tip.label <- toupper(sub("(\\w\\w\\w)\\w+_(\\w\\w\\w)\\w+","\\1\\2",TreeSpec$tip.label))
+
+identical(sort(TreeSpec$tip.label) ,sort(colnames(SPsubm)))
+
 
