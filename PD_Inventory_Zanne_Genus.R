@@ -77,7 +77,7 @@ TreeInvG$tip.label <- sub("(\\w)_.+","\\1",TreeInvG$tip.label)
 
 ###############################################################################
 
-########## calculate PD at Genus level ########################################
+###################### calculate PD at Genus level ############################
 
 # load inventory species matrix ("species.matrix", structure is dataframe)
 # contains all plots in Inventories with unique plotcode (rows) and species /
@@ -127,12 +127,15 @@ rownames(species.matrix.g) <- spec_Genus_w[[1]]
 TreeInvG$tip.label <- toupper(substr(TreeInvG$tip.label,1,3))
 
 # match species in Tree with species present in species.matrix
+colnames(species.matrix.g) %in% toupper(substr(TreeInvG$tip.label,1,3))
+
 #### OBS: all Genus in the species.matrix file are present in the Tree and the file contains fewer Genuses than the list above!
 
 TreeInvGp <- prune.sample(species.matrix.g, TreeInvG)
 
-#calculate psv, psr, pse  [Helmus et al 2007; Phylogenetic measures of biodiversity.]
+#calculate psv & pse  [Helmus et al 2007; Phylogenetic measures of biodiversity.]
 #calculate pd; [Faith D.P. (1992) Conservation evaluation and phylogenetic diversity.]
+#calculate mpd (abundance weighted and binary) [Webb et al 2002; Phylogenies and community ecology.]
 
 #### psv: phylogenetic species variability ####
 
@@ -141,17 +144,10 @@ TreeInvGp <- prune.sample(species.matrix.g, TreeInvG)
 # trait shared by all species in a community. 
 # bound between 0 and 1 (1 = max variability; all sp. unrelated)
 
-#### psr: phylogenetic species eveness ####
+#### pse: phylogenetic species eveness ####
 
 # modified psv that incorporates abundance information
 # bound between 0 and 1 (1 = copletely even community with star phylogeny)
-
-#### psr: phylogenetic species richness ####
-
-# psv x richness
-# "scales" the richness (S) of the community by it's psv
-# bound between 0 and S
-# often strongly correlated to S 
 
 psv.result<-psv(species.matrix.g, TreeInvGp)
 psv.result$plotcode <- rownames(psv.result)
@@ -159,18 +155,22 @@ psv.result$plotcode <- rownames(psv.result)
 pse.result<-pse(species.matrix.g, TreeInvGp) # basal are is taken as species abundance
 pse.result$plotcode <- rownames(pse.result)
 
-psr.result<-psr(species.matrix.g, TreeInvGp)
-psr.result$plotcode <- rownames(psr.result)
 
 # pd seems to fail if sites with richness 1 are included wherfore I exclude them manually
 ## OBS pd takes ~2 minutes  to run! ###
 pd.result<-pd(species.matrix.g[which(specnumber(species.matrix.g) > 1),], TreeInvGp)
 pd.result$plotcode <- rownames(pd.result)
 
+mpd.result <- mpd(species.matrix.g, cophenetic(TreeInvGp), abundance.weighted = F)
+mpd.result_aw <- mpd(species.matrix.g, cophenetic(TreeInvGp), abundance.weighted = T)
+
+MPD <- data.frame(plotcode = rownames(species.matrix.g), mpd = mpd.result, 
+                  mpd.aw = mpd.result_aw)
+
 # join the different metrics to common dataframe
-PhylDiv<-join(psv.result,pse.result,by="plotcode")
-PhylDiv<-join(PhylDiv,psr.result,by="plotcode")
-PhylDiv<-join(PhylDiv,pd.result,by="plotcode")
+PhylDiv <- join(psv.result,pse.result,by="plotcode")
+PhylDiv <- join(PhylDiv,pd.result,by="plotcode")
+PhylDiv <- join(PhylDiv,MPD,by="plotcode")
 
 # reorder columns and exclude redundant ones 
 PhylDiv <- PhylDiv[,c(4,1,3,5,7,9,10,2)]
@@ -179,8 +179,11 @@ colnames(PhylDiv) <- c("plotcode", "PSV","PSV_var","PSE","PSR","PSR_var","PD","g
 #code NAs as 0 (NAs are produced if the genus richness in a plot is 1, in this case phylogenetic diveristy is 0)
 PhylDiv[,2:7][is.na(PhylDiv[,2:7])] <- 0
 
+# sort columns and drop redundant SR
+PhylDiv <- PhylDiv[,c(4,1,5,7,9,10,2)]
+
 # export results 
-#write.table(PhylDiv,"PhylDiv_Inv_Genus.txt",sep="\t")
+write.table(PhylDiv,"PhylDiv_Inv_Genus.txt",sep="\t")
 
 
 ###########################
@@ -357,5 +360,9 @@ S <-  ggplot(Phyl_comp, aes(x=species_richness, y=genus_richness))+
 
 
 grid.arrange(PSV,PSE,PD,PSR,S,nrow=2)
+
+ggplot(Phyl_comp, aes(y=PD_G, x=species_richness))+
+  geom_point(alpha=0.4)+
+  theme_bw()
 
 
