@@ -20,7 +20,6 @@ library("vegan")
 library("plyr")
 library("gridExtra")
 
-
 # first time #
 ######################################################################
 
@@ -52,7 +51,7 @@ SPInv[which (! SPInv$PD.code %in% Tree$tip.label),]$PD.code[
 
 # check which genus are not in Phylogeny
 SPInv[which (! sub("(\\w)_.+","\\1",SPInv$PD.code) %in% 
-                 sub("(\\w)_.+","\\1",Tree$tip.label)),]$PD.code
+               sub("(\\w)_.+","\\1",Tree$tip.label)),]$PD.code
 
 # Heberdenia 
 # Visnea
@@ -69,7 +68,7 @@ TreeInv<-drop.tip(Tree,Drop)
 
 # keep only the first species per genus
 Drop2<- TreeInv$tip.label[-c(match(unique(sub("(\\w)_.+","\\1",TreeInv$tip.label))
-              , sub("(\\w)_.+","\\1",TreeInv$tip.label)))]
+                                   , sub("(\\w)_.+","\\1",TreeInv$tip.label)))]
 
 TreeInvG <- drop.tip(TreeInv,Drop2)
 
@@ -109,7 +108,7 @@ TRUE %in% (French$plotcode %in% SPM3$plotcode)
 species.matrix <- rbind.fill(SPM3,French)
 species.matrix[is.na(species.matrix)] <- 0
 
-           
+
 #######################
 #group species to Genus level (add basal are in each plot of all species of the same Genus) #
 #######################
@@ -208,185 +207,3 @@ PhylDiv <- PhylDiv[,c(4,1,5,7,9,10,2)]
 
 # export results 
 write.table(PhylDiv,"PhylDiv_Inv_Genus.txt",sep="\t")
-
-
-###########################
-# compare the correspondance of species level PD metrics with genus level PD metrics
-###########################
-
-# which species from the species.matrix are present in the tree from Zanne et al
-# compare the species codes (colnames) with the Species in the SPInv file and compare these species names 
-# with the tip.lables of Zannes tree.
-
-TreeSpec <- Tree
-
-# Species list of inventories (excluding Genus)
-SPInvSP <- SPInv[nchar(as.character(SPInv$Code)) == 6,]
-
-# further subsetted Species list of inventories with only species also present in species.matrix
-SPInvSPmat <- SPInvSP[SPInvSP$Code %in% colnames(species.matrix),]
-
-# which species from the species matrix are in TreeSpec # gives row ind from SPInv
-SPm <- which(SPInvSPmat$PD.code %in% TreeSpec$tip.label)
-
-# get corresponding columns in species matrix 
-CNp <- which(colnames(species.matrix) %in% SPInvSPmat[SPm,]$Code)
-
-# subset species.matrix for species present in Zannes Tree
-SPsub <- species.matrix[,c(1,CNp)]
-
-# exclude plots with 0 abundance
-SPsub <- SPsub[-c(which(rowSums(SPsub[,-1]) == 0)),]
-
-# make species matrix
-SPsubm <- as.matrix(SPsub[,-1])
-dimnames(SPsubm)<-list(SPsub$plotcode,colnames(SPsub[,-1]))
-
-#### make Tree with only species present in species matrix
-
-# DropT <- tips to drop
-DropT <- TreeSpec$tip.label[which(! TreeSpec$tip.label %in% SPInvSPmat[SPInvSPmat$Code %in% colnames(SPsubm),]$PD.code)]
-
-#drop tips 
-TreeSpec <- drop.tip(TreeSpec, DropT)
-
-# transform tiplabel to same code as used in species matrix (GGGSSS)
-TreeSpec$tip.label <- toupper(sub("(\\w\\w\\w)\\w+_(\\w\\w\\w)\\w+","\\1\\2",TreeSpec$tip.label))
-
-#check
-identical(sort(TreeSpec$tip.label) ,sort(colnames(SPsubm)))
-
-##################
-# make corresponding Species.Matrix and Tree collapsed at Genus level
-#################
-
-GenDT <- as.data.table(SPsubm)
-
-# adding plotcode to data.table 
-GenDT[,plotcode := rownames(SPsubm)]
-
-#reshape dataframe in long format
-GenDTl <- melt(GenDT, id="plotcode", variable.name="speccode", value.name="basal_area")
-
-#add Genus column (first three lettres from speccode)
-GenDTl[, genus := substr(speccode,1,3)]
-
-# sum all basal areas for all species in one genus in one plot
-setkeyv(GenDTl,c("plotcode","genus"))
-GenDTlsub <- GenDTl[, sum(basal_area), by=list(plotcode,genus)]
-
-#cast datatabel into wide format
-GenDTw <- dcast.data.table(GenDTlsub, plotcode~genus) ######## data.table with the basal areas for each Genus in each plot
-
-#transform to genus matrix
-GenDTm <- as.matrix(GenDTw[,-1, with=F])
-rownames(GenDTm) <- GenDTw[[1]]
-
-######## subset make corresponding Genus Tree #########
-
-# keep the first species of each Genus and then replace the species name by genus name only 
-TreeGen <- drop.tip(TreeSpec, TreeSpec$tip.label[-c(match(unique(substr(TreeSpec$tip.label,1,3)),substr(TreeSpec$tip.label,1,3)))])
-TreeGen$tip.label <- substr(TreeGen$tip.label,1,3)
-
-#check
-identical(sort(TreeGen$tip.label),sort(colnames(GenDTm)))
-
-################ calcultae Phylogenetic diveristy for the species-based matrix  ############
-
-##### for species level ######
-
-psv.species<-psv(SPsubm, TreeSpec)
-psv.species$plotcode <- rownames(psv.species)
-
-pse.species<-pse(SPsubm, TreeSpec) # basal are is taken as species abundance
-pse.species$plotcode <- rownames(pse.species)
-
-psr.species<-psr(SPsubm, TreeSpec)
-psr.species$plotcode <- rownames(psr.species)
-
-# pd seems to fail if sites with richness 1 are included wherfore I exclude them manually
-## OBS pd takes ~2 minutes  to run! ###
-pd.species<-pd(SPsubm[which(specnumber(SPsubm) > 1),], TreeSpec)
-pd.species$plotcode <- rownames(pd.species)
-
-# join the different metrics to common dataframe
-Phyl_species<-join(psv.species,pse.species,by="plotcode")
-Phyl_species<-join(Phyl_species,psr.species,by="plotcode")
-Phyl_species<-join(Phyl_species,pd.species,by="plotcode")
-
-# reorder columns and exclude redundant ones 
-Phyl_species <- Phyl_species[,c(4,1,3,5,7,9,10,2)]
-colnames(Phyl_species) <- c("plotcode", "PSV_S","PSV_var_S","PSE_S","PSR_S","PSR_var_S","PD_S","species_richness" )
-
-#code NAs as 0 (NAs are produced if the genus richness in a plot is 1, in this case phylogenetic diveristy is 0)
-Phyl_species[,2:7][is.na(Phyl_species[,2:7])] <- 0
-
-################ calcultae Phylogenetic diveristy for the Genus based matrix ############
-
-##### for Genus level ######
-
-psv.genus<-psv(GenDTm, TreeGen)
-psv.genus$plotcode <- rownames(psv.genus)
-
-pse.genus<-pse(GenDTm, TreeGen) # basal are is taken as genus abundance
-pse.genus$plotcode <- rownames(pse.genus)
-
-psr.genus<-psr(GenDTm, TreeGen)
-psr.genus$plotcode <- rownames(psr.genus)
-
-# pd seems to fail if sites with richness 1 are included wherfore I exclude them manually
-## OBS pd takes ~2 minutes  to run! ###
-pd.genus<-pd(GenDTm[which(specnumber(GenDTm) > 1),], TreeGen)
-pd.genus$plotcode <- rownames(pd.genus)
-
-# join the different metrics to common dataframe
-Phyl_genus<-join(psv.genus,pse.genus,by="plotcode")
-Phyl_genus<-join(Phyl_genus,psr.genus,by="plotcode")
-Phyl_genus<-join(Phyl_genus,pd.genus,by="plotcode")
-
-# reorder columns and exclude redundant ones 
-Phyl_genus <- Phyl_genus[,c(4,1,3,5,7,9,10,2)]
-colnames(Phyl_genus) <- c("plotcode", "PSV_G","PSV_var_G","PSE_G","PSR_G","PSR_var_G","PD_G","genus_richness" )
-
-#code NAs as 0 (NAs are produced if the genus richness in a plot is 1, in this case phylogenetic diveristy is 0)
-Phyl_genus[,2:7][is.na(Phyl_genus[,2:7])] <- 0
-
-
-########### join and compare Phyl_genus & Phyl_species ############
-
-#join
-Phyl_comp <- join(Phyl_species, Phyl_genus)
-
-# PSV
-PSV <- ggplot(Phyl_comp, aes(x=PSV_S, y=PSV_G))+
-  geom_point(alpha=0.4)+
-  theme_bw()
-
-# PSE
-PSE <- ggplot(Phyl_comp, aes(x=PSE_S, y=PSE_G))+
-  geom_point(alpha=0.4)+
-  theme_bw()
-
-# PSR
-PSR <- ggplot(Phyl_comp, aes(x=PSR_S, y=PSR_G))+
-  geom_point(alpha=0.4)+
-  theme_bw()
-
-# PD
-PD <- ggplot(Phyl_comp, aes(x=PD_S, y=PD_G))+
-  geom_point(alpha=0.4)+
-  theme_bw()
-
-# S
-S <-  ggplot(Phyl_comp, aes(x=species_richness, y=genus_richness))+
-  geom_point(alpha=0.4)+
-  theme_bw()
-
-
-grid.arrange(PSV,PSE,PD,PSR,S,nrow=2)
-
-ggplot(Phyl_comp, aes(y=PD_G, x=species_richness))+
-  geom_point(alpha=0.4)+
-  theme_bw()
-
-
