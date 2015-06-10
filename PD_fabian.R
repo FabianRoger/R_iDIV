@@ -84,50 +84,24 @@ TreeInvG$tip.label <- sub("(\\w)_.+","\\1",TreeInvG$tip.label)
 # genus identifier as columns. Species identifier is of the form GGGSpSpSp
 # colums are filled with basal area value of tree / Genus in specific plot
 
-# load the different species matrix. ONLY LOAD ONE if
-# you don't wnat to merge them! (if you want to merge them, rename each after 
-# loading)
+########### load right species matrix ###################
 
-# load species matrix without french data
-load("upscale_inventory_species_matrix_ba_ha.RData")
+### load species matrix without french data
+#load("upscale_inventory_species_matrix_ba_ha.RData")
+#FileName <- "PhylDiv_inventory_genus.txt"
 
-# rename for merging
-#SPM1 <- species.matrix
+### load species matrix with french data
+#load("upscale_inventory_species_matrix_ba_ha-1.RData")
+#FileName <- "PhylDiv_inventory_wFrench_genus.txt"
 
-# load species matrix with french data
-load("upscale_inventory_species_matrix_ba_ha-1.RData")
-
-# rename for merging
-#SPM2 <- species.matrix
-
-# load species matrix with exploratory platform but w/o french data
+### load species matrix with exploratory 
 load("upscale_inventory_extrapolation_species_matrix_ba_ha.RData")
+FileName <- "PhylDiv_wExploratorxy_genus.txt"
 
-# rename for merging
-#SPM3 <- species.matrix
-
-# load species matrix from experiments
-load(file = "joined_Experiments_Genus.RData")
-
-################### # if you want to merge files load all of the above
-# datasets an execude this code below. Else make sure the right species 
-# matrix is loaded and jump over this bit ################
-
-# subset with french data
-French <- SPM2[which(!SPM2$plotcode %in% SPM1$plotcode),]
-
-TRUE %in% (French$plotcode %in% SPM3$plotcode)
-
-# add french plotcodes to full matrix wit exploratories
-species.matrix <- rbind.fill(SPM3,French)
-species.matrix[is.na(species.matrix)] <- 0
-
-# join experimental data to matrix
-species.matrix <- rbind.fill(species.matrix, Experiment_G_w)
-species.matrix[is.na(species.matrix)] <- 0 
-
-################################################################################
-
+### load species matrix from experiments
+#load(file = "joined_Experiments_Genus.RData")
+#species.matrix <- Experiment_G_w
+#FileName <- "PhylDiv_Experiments_genus.txt"
 
 #######################
 #group species to Genus level (add basal are in each plot of all species of the same Genus) #
@@ -174,7 +148,8 @@ TreeInvG$tip.label <- toupper(substr(TreeInvG$tip.label,1,3))
 colnames(species.matrix.g)[which( ! colnames(species.matrix.g) %in%
                                    toupper(substr(TreeInvG$tip.label,1,3)))]
 
-# one genus ("VIB") is missing from tree.
+# one genus ("VIB") is missing from tree i
+# in Experiment dataset
 
 spec_Genus_w[which(spec_Genus_w$VIB > 0),]
 
@@ -184,7 +159,8 @@ spec_Genus_w[which(spec_Genus_w$VIB > 0),]
 PLOTnumb <- which(spec_Genus_w$VIB > 0)
 SPECcol <- which(colnames(species.matrix.g) == "VIB")
 
-species.matrix.g <- species.matrix.g[-PLOTnumb, -SPECcol]
+if (length(PLOTnumb) > 0) {
+species.matrix.g <- species.matrix.g[-PLOTnumb, -SPECcol] }
 
 
 #### OBS: all Genus in the species.matrix file are present in the Tree and the file contains fewer Genuses than the list above!
@@ -234,18 +210,9 @@ PhylDiv <- join(PhylDiv,MPD,by="plotcode")
 PhylDiv <- PhylDiv[,c(4,1,3,5,7,9,10,2)]
 colnames(PhylDiv) <- c("plotcode", "PSV","PSV_var","PSE","PD","mpd","mpd.aw","genus_richness" )
 
+
 #code NAs as 0 (NAs are produced if the genus richness in a plot is 1, in this case phylogenetic diveristy is 0)
 PhylDiv[,2:8][is.na(PhylDiv[,2:8])] <- 0
 
-# add platform variable
-PhylDiv$Platform <- NA
-
-# mark experiemntal plots
-PhylDiv[which(PhylDiv$plotcode %in% Experiment_G_w$plotcode), ]$Platform <- "Experiment"
-
-# mark inventory plot
-
-
-
 # export results 
-write.table(PhylDiv,"PhylDiv_Inv_Explo_Exp_Genus.txt",sep="\t")
+write.table(PhylDiv,FileName,sep="\t")
